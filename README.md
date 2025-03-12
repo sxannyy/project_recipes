@@ -25,8 +25,8 @@ pip install torch transformers pandas nltk pymorphy3
 3. Модель обучается на размеченном датасете.
 4. Итоговая модель сохраняется в `ner_model.pth`.
 
-Ссылка на блокнот с обучением: https://colab.research.google.com/drive/1GbcKVIBIFGvbLhtLiNFxO9EahMUDDL2D?usp=sharing
-
+Ссылка на блокнот с обучением: [https://colab.research.google.com/drive/1GbcKVIBIFGvbLhtLiNFxO9EahMUDDL2D?usp=sharing
+](https://colab.research.google.com/drive/1QBxSLsA3J6XkN66J9HZtdzOW2P7QqZ0N?usp=sharing)
 ## Запуск приложения
 ```bash
 python recipe_app.py
