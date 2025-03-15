@@ -39,7 +39,7 @@ python recipe_app.py
 - `word2vec_recipes.model` — модель Word2Vec.
 
 ## Пример работы
-
+![Демонстрация к проекту](https://github.com/sxannyy/project_recipes/blob/main/demo.png)
 
 ## Возможные улучшения и развитие проекта
 - Поддержка нескольких языков.
