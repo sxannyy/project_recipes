@@ -1,56 +1,52 @@
 import torch
+import numpy as np
 import pandas as pd
+from gensim.models import Word2Vec
 from transformers import BertTokenizer, BertForTokenClassification
-from nltk.tokenize import word_tokenize
-from pymorphy3 import MorphAnalyzer
+from sklearn.neighbors import NearestNeighbors
+from datasets import load_dataset
 
-model_path = "ner_model.pth"
-model = BertForTokenClassification.from_pretrained("bert-base-multilingual-cased", num_labels=3)
-model.load_state_dict(torch.load(model_path))
-model.eval()
+word2vec_model = Word2Vec.load("word2vec_recipes.model")
 
-tokenizer = BertTokenizer.from_pretrained("tokenizer")
+def get_recipe_vector(text_tokens, model):
+    vectors = [model.wv[word] for word in text_tokens if word in model.wv]
+    return np.mean(vectors, axis=0) if vectors else np.zeros(model.vector_size)
 
 dataset = load_dataset("d0rj/povarenok_recipes_detail")["train"]
-df = pd.DataFrame(dataset)
+recipe_data = pd.DataFrame(dataset)
+recipe_data["vector_description"] = recipe_data["description"].apply(
+    lambda x: get_recipe_vector(x.split() if isinstance(x, str) else [], word2vec_model)
+)
 
-morph = MorphAnalyzer()
+recipe_data["vector_ingredients"] = recipe_data["ingredients"].apply(
+    lambda x: get_recipe_vector(" ".join([ing["name"] for ing in x if "name" in ing]).split() if isinstance(x, list) else [], word2vec_model)
+)
 
-def preprocess_text(text):
-    text = text.lower()
-    words = word_tokenize(text)
-    words = [morph.parse(word)[0].normal_form for word in words]
-    return words
+recipe_data["recipe_vector"] = recipe_data.apply(
+    lambda row: np.concatenate([row["vector_description"], row["vector_ingredients"]]), axis=1
+)
+recipe_vectors = np.vstack(recipe_data["recipe_vector"].values)
 
-def extract_ingredients(text):
-    tokens = word_tokenize(text)
-    inputs = tokenizer(tokens, is_split_into_words=True, return_tensors="pt", padding=True, truncation=True)
-    with torch.no_grad():
-        outputs = model(**inputs).logits
-    predictions = torch.argmax(outputs, dim=-1).squeeze().tolist()
+knn_model = NearestNeighbors(n_neighbors=5, metric="cosine")
+knn_model.fit(recipe_vectors)
+
+model = BertForTokenClassification.from_pretrained("bert-base-multilingual-cased", num_labels=3)
+model.load_state_dict(torch.load("ner_model.pth", map_location=torch.device("cpu")))
+tokenizer = BertTokenizer.from_pretrained("tokenizer")
+
+def recommend_recipes(ingredients):
+    tokens = ingredients.lower().split()
+    vector_description = get_recipe_vector(tokens, word2vec_model)
+    vector_ingredients = get_recipe_vector(tokens, word2vec_model)
+
+    input_vector = np.concatenate([vector_description, vector_ingredients]).reshape(1, -1)
+
+    distances, indices = knn_model.kneighbors(input_vector, n_neighbors=5)
     
-    ingredients = []
-    for token, label_id in zip(tokens, predictions):
-        if label_id == 1 or label_id == 2:
-            ingredients.append(token)
-    return set(ingredients)
-
-def find_matching_recipes(user_ingredients):
-    matching_recipes = []
-    for _, row in df.iterrows():
-        recipe_ingredients = set(preprocess_text(" ".join([ing["name"] for ing in eval(row["ingredients"]) if "name" in ing])))
-        match_count = len(user_ingredients & recipe_ingredients)
-        if match_count > 0:
-            matching_recipes.append((row["title"], match_count))
-    matching_recipes.sort(key=lambda x: x[1], reverse=True)
-    return matching_recipes[:5]
+    print("Рекомендованные рецепты:")
+    for idx in indices[0]:
+        print(recipe_data.iloc[idx]['title'])
 
 if __name__ == "__main__":
-    user_input = input("Введите список ингредиентов: ")
-    extracted_ingredients = extract_ingredients(user_input)
-    print(f"Выделенные ингредиенты: {', '.join(extracted_ingredients)}")
-    
-    recipes = find_matching_recipes(extracted_ingredients)
-    print("\nПохожие рецепты:")
-    for title, matches in recipes:
-        print(f"{title} (Совпадений: {matches})")
+    user_input = input("Введите список ингредиентов через запятую: ")
+    recommend_recipes(user_input)
