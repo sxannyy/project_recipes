@@ -11,7 +11,7 @@
 ## Установка
 Перед запуском необходимо установить все зависимости:
 ```bash
-pip install torch transformers pandas nltk pymorphy3
+pip install torch transformers pandas nltk numpy sklearn gensim datasets
 ```
 
 ## Подготовка датасета
